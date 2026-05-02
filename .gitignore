@@ -1,0 +1,38 @@
+# Environment and local secrets
+.env
+.env.local
+.local/
+
+# Runtime storage
+storage/*
+!storage/.gitkeep
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.uv-cache/
+.coverage
+htmlcov/
+
+# Local editor and agent state
+.idea/
+.vscode/
+.omx/

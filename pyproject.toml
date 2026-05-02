@@ -1,0 +1,33 @@
+[project]
+name = "mini-notebooklm-rag"
+version = "0.1.0"
+description = "Local-first NotebookLM-like RAG application for learning and portfolio use."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "pydantic-settings",
+    "streamlit",
+]
+
+[project.scripts]
+app = "mini_notebooklm_rag.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.uv]
+package = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
