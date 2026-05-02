@@ -5,9 +5,12 @@ description = "Local-first NotebookLM-like RAG application for learning and port
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "faiss-cpu",
     "markdown-it-py",
     "pydantic-settings",
     "pymupdf",
+    "rank-bm25",
+    "sentence-transformers",
     "streamlit",
 ]
 

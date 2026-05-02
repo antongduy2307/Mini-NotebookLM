@@ -321,6 +321,82 @@ class DocumentRepository:
             ).fetchall()
         return [_chunk_from_row(row) for row in rows]
 
+    def list_chunks_for_workspace(self, workspace_id: str) -> list[ChunkRecord]:
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM chunks
+                WHERE workspace_id = ?
+                ORDER BY document_id ASC, chunk_index ASC
+                """,
+                (workspace_id,),
+            ).fetchall()
+        return [_chunk_from_row(row) for row in rows]
+
+    def list_chunks_for_documents(
+        self,
+        workspace_id: str,
+        document_ids: list[str],
+    ) -> list[ChunkRecord]:
+        if not document_ids:
+            return []
+        placeholders = ",".join("?" for _ in document_ids)
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM chunks
+                WHERE workspace_id = ? AND document_id IN ({placeholders})
+                ORDER BY document_id ASC, chunk_index ASC
+                """,
+                (workspace_id, *document_ids),
+            ).fetchall()
+        return [_chunk_from_row(row) for row in rows]
+
+    def get_chunks_by_ids(self, chunk_ids: list[str]) -> list[ChunkRecord]:
+        if not chunk_ids:
+            return []
+        placeholders = ",".join("?" for _ in chunk_ids)
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM chunks
+                WHERE id IN ({placeholders})
+                """,
+                tuple(chunk_ids),
+            ).fetchall()
+        chunks_by_id = {_chunk_from_row(row).id: _chunk_from_row(row) for row in rows}
+        return [chunks_by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in chunks_by_id]
+
+    def count_chunks_for_workspace(self, workspace_id: str) -> int:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM chunks WHERE workspace_id = ?",
+                (workspace_id,),
+            ).fetchone()
+        return int(row[0])
+
+    def count_chunks_for_documents(
+        self,
+        workspace_id: str,
+        document_ids: list[str],
+    ) -> dict[str, int]:
+        if not document_ids:
+            return {}
+        placeholders = ",".join("?" for _ in document_ids)
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT document_id, COUNT(*) AS chunk_count
+                FROM chunks
+                WHERE workspace_id = ? AND document_id IN ({placeholders})
+                GROUP BY document_id
+                """,
+                (workspace_id, *document_ids),
+            ).fetchall()
+        counts = {document_id: 0 for document_id in document_ids}
+        counts.update({row["document_id"]: int(row["chunk_count"]) for row in rows})
+        return counts
+
     def delete(self, document_id: str) -> None:
         with connect(self.db_path) as connection:
             connection.execute("DELETE FROM documents WHERE id = ?", (document_id,))

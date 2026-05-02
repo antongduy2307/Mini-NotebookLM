@@ -134,3 +134,53 @@ def test_workspace_delete_cascades_documents_and_chunks(tmp_path) -> None:
         chunk_count = connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
     assert document_count == 0
     assert chunk_count == 0
+
+
+def test_document_repository_chunk_read_helpers(tmp_path) -> None:
+    db_path = tmp_path / "app.db"
+    initialize_database(db_path)
+    workspace = WorkspaceRepository(db_path).create("Research")
+    repository = DocumentRepository(db_path)
+    for document_id in ("doc1", "doc2"):
+        repository.insert_with_chunks(
+            NewDocumentRecord(
+                id=document_id,
+                workspace_id=workspace.id,
+                display_name=f"{document_id}.md",
+                stored_filename=f"{document_id}__notes.md",
+                relative_path=f"workspaces/{workspace.id}/documents/{document_id}__notes.md",
+                source_type="markdown",
+                content_hash=f"hash-{document_id}",
+                size_bytes=10,
+                page_count=None,
+            ),
+            [
+                NewChunkRecord(
+                    id=f"chunk-{document_id}",
+                    workspace_id=workspace.id,
+                    document_id=document_id,
+                    chunk_index=0,
+                    source_type="markdown",
+                    filename=f"{document_id}.md",
+                    text=document_id,
+                    page_start=None,
+                    page_end=None,
+                    heading_path=["Intro"],
+                    approximate_token_count=2,
+                    content_hash=f"chunk-hash-{document_id}",
+                )
+            ],
+        )
+
+    workspace_chunks = repository.list_chunks_for_workspace(workspace.id)
+    selected_chunks = repository.list_chunks_for_documents(workspace.id, ["doc2"])
+    chunks_by_id = repository.get_chunks_by_ids(["chunk-doc2", "chunk-doc1"])
+
+    assert [chunk.id for chunk in workspace_chunks] == ["chunk-doc1", "chunk-doc2"]
+    assert [chunk.id for chunk in selected_chunks] == ["chunk-doc2"]
+    assert [chunk.id for chunk in chunks_by_id] == ["chunk-doc2", "chunk-doc1"]
+    assert repository.count_chunks_for_workspace(workspace.id) == 2
+    assert repository.count_chunks_for_documents(workspace.id, ["doc1", "missing"]) == {
+        "doc1": 1,
+        "missing": 0,
+    }

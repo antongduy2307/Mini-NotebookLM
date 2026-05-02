@@ -40,6 +40,15 @@ class StoragePaths:
     def documents_dir(self, workspace_id: str) -> Path:
         return self.workspace_subdir(workspace_id, "documents")
 
+    def indexes_dir(self, workspace_id: str) -> Path:
+        return self.workspace_subdir(workspace_id, "indexes")
+
+    def faiss_index_path(self, workspace_id: str) -> Path:
+        return self.ensure_inside(self.indexes_dir(workspace_id) / "faiss.index")
+
+    def faiss_metadata_path(self, workspace_id: str) -> Path:
+        return self.ensure_inside(self.indexes_dir(workspace_id) / "faiss_meta.json")
+
     def stored_document_path(self, workspace_id: str, stored_filename: str) -> Path:
         return self.ensure_inside(self.documents_dir(workspace_id) / stored_filename)
 
