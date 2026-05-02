@@ -68,6 +68,47 @@ ON chunks(document_id);
 
 CREATE INDEX IF NOT EXISTS idx_chunks_workspace_document
 ON chunks(workspace_id, document_id);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    selected_document_ids TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_workspace_updated
+ON chat_sessions(workspace_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    selected_document_ids TEXT,
+    original_query TEXT,
+    rewritten_query TEXT,
+    answer_mode TEXT,
+    source_map TEXT,
+    retrieval_metadata TEXT,
+    prompt_metadata TEXT,
+    model_name TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    total_tokens INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created
+ON chat_messages(session_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_workspace_created
+ON chat_messages(workspace_id, created_at);
 """
 
 
@@ -81,6 +122,6 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def initialize_database(db_path: Path) -> None:
-    """Create Phase 01 tables and indexes if they do not exist."""
+    """Create application tables and indexes if they do not exist."""
     with connect(db_path) as connection:
         connection.executescript(SCHEMA_SQL)

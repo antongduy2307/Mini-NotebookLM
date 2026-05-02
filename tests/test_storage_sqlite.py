@@ -18,5 +18,5 @@ def test_initialize_database_is_idempotent(tmp_path) -> None:
         }
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
-    assert {"workspaces", "documents", "chunks"}.issubset(tables)
+    assert {"workspaces", "documents", "chunks", "chat_sessions", "chat_messages"}.issubset(tables)
     assert foreign_keys == 1

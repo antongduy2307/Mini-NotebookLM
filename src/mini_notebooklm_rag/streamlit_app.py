@@ -1,11 +1,13 @@
-"""Phase 02 Streamlit UI for ingestion and retrieval debugging."""
+"""Streamlit UI for ingestion, retrieval debugging, and grounded chat."""
 
 from __future__ import annotations
 
 import streamlit as st
 
+from mini_notebooklm_rag.chat.service import ChatService
 from mini_notebooklm_rag.config import get_settings
 from mini_notebooklm_rag.ingestion.service import IngestionError, IngestionService, WorkspaceService
+from mini_notebooklm_rag.qa.service import QAResult, QAService, QAServiceError
 from mini_notebooklm_rag.retrieval.embeddings import EmbeddingDeviceError
 from mini_notebooklm_rag.retrieval.service import (
     MAX_SELECTED_DOCUMENTS,
@@ -26,6 +28,7 @@ def render() -> None:
     settings = get_settings()
     workspace_service = WorkspaceService(settings)
     ingestion_service = IngestionService(settings)
+    chat_service = ChatService(settings)
     retrieval_service: RetrievalService | None
     try:
         retrieval_service = RetrievalService(settings)
@@ -34,10 +37,10 @@ def render() -> None:
         st.error(str(exc))
 
     st.title("mini-notebooklm-rag")
-    st.caption("Phase 02: local ingestion plus retrieval debugging foundation")
+    st.caption("Phase 03: grounded QA and workspace chat over local retrieval")
     st.info(
         "Create a workspace, upload PDF or Markdown documents, build a local retrieval index, "
-        "and inspect retrieved chunks. Answer generation and chat are intentionally deferred."
+        "inspect retrieved chunks, and ask grounded questions with citations."
     )
 
     workspaces = workspace_service.list_workspaces()
@@ -55,12 +58,13 @@ def render() -> None:
         st.divider()
         if retrieval_service is not None:
             _render_retrieval_panel(retrieval_service, selected_workspace, documents)
+            st.divider()
+            qa_service = QAService(settings, chat_service, retrieval_service)
+            _render_chat_panel(qa_service, chat_service, selected_workspace, documents)
 
     st.divider()
-    st.subheader("Answer generation and chat")
-    st.warning(
-        "Answer generation, chat, summaries, evaluation, MLflow, and OpenAI calls are Phase 03+."
-    )
+    st.subheader("Later phases")
+    st.warning("Summaries, evaluation, MLflow, and deployment are Phase 04+.")
 
 
 def _render_workspace_panel(
@@ -198,7 +202,7 @@ def _render_retrieval_panel(
 ) -> None:
     st.subheader("Retrieval debug")
     st.caption("Build a local FAISS index and inspect hybrid dense/BM25 retrieval results.")
-    st.warning("This is not a chat interface. Answer generation is planned for Phase 03.")
+    st.warning("This panel is for retrieval debugging. Use Chat below for grounded answers.")
 
     embedding_info = retrieval_service.embedding_info
     st.write(
@@ -301,6 +305,172 @@ def _render_retrieval_panel(
                 )
                 with st.expander("Source chunk"):
                     st.write(result.text)
+
+
+def _render_chat_panel(
+    qa_service: QAService,
+    chat_service: ChatService,
+    workspace: Workspace,
+    documents: list[DocumentRecord],
+) -> None:
+    st.subheader("Chat")
+    st.caption("Ask grounded questions over selected documents with source citations.")
+
+    settings = get_settings()
+    temporary_key = st.text_input(
+        "Temporary OpenAI API key",
+        type="password",
+        key="temporary_openai_api_key",
+        help="Stored only in Streamlit session state. It is not written to SQLite or files.",
+    )
+    api_key = temporary_key or settings.openai_api_key
+    if temporary_key:
+        st.caption("API key source: temporary session input")
+    elif settings.openai_api_key:
+        st.caption("API key source: .env")
+    else:
+        st.caption("API key source: not configured")
+
+    model = st.text_input("Generation model", value=settings.openai_model)
+    rewrite_model = st.text_input("Query rewrite model", value=settings.openai_query_rewrite_model)
+    allow_outside = st.toggle(
+        "Allow outside knowledge",
+        value=settings.allow_outside_knowledge,
+        help="When enabled, answers separate document-grounded content from outside knowledge.",
+    )
+    enable_rewrite = st.toggle(
+        "Enable query rewrite",
+        value=settings.enable_query_rewrite,
+        help="Uses only the current chat session history.",
+    )
+
+    if not documents:
+        st.caption("Upload documents before starting a chat.")
+        return
+
+    document_options = {
+        f"{document.display_name} ({document.id[:8]})": document.id for document in documents
+    }
+    selected_labels = st.multiselect(
+        "Chat documents",
+        list(document_options),
+        help=f"Select up to {MAX_SELECTED_DOCUMENTS} documents for this chat.",
+        key=f"chat_documents_{workspace.id}",
+    )
+    selected_document_ids = [document_options[label] for label in selected_labels]
+    if len(selected_document_ids) > MAX_SELECTED_DOCUMENTS:
+        st.error(f"Select at most {MAX_SELECTED_DOCUMENTS} documents.")
+        return
+
+    sessions = chat_service.list_sessions(workspace.id)
+    session_labels = {f"{session.title} ({session.id[:8]})": session for session in sessions}
+    selected_session_id = st.session_state.get(f"selected_chat_session_{workspace.id}")
+    if session_labels:
+        labels = list(session_labels)
+        current_index = next(
+            (
+                index
+                for index, label in enumerate(labels)
+                if session_labels[label].id == selected_session_id
+            ),
+            0,
+        )
+        selected_label = st.selectbox("Chat history", labels, index=current_index)
+        session = session_labels[selected_label]
+        st.session_state[f"selected_chat_session_{workspace.id}"] = session.id
+    else:
+        session = None
+        st.caption("No chat sessions yet.")
+
+    col_new, col_delete = st.columns(2)
+    if col_new.button("New chat"):
+        session = chat_service.create_session(
+            workspace_id=workspace.id,
+            selected_document_ids=selected_document_ids,
+            title="New chat",
+        )
+        st.session_state[f"selected_chat_session_{workspace.id}"] = session.id
+        st.rerun()
+
+    if session is not None and col_delete.button("Delete selected chat"):
+        chat_service.delete_session(session.id)
+        st.session_state.pop(f"selected_chat_session_{workspace.id}", None)
+        st.rerun()
+
+    if session is None:
+        st.info("Create a new chat to ask questions.")
+        return
+
+    messages = chat_service.list_messages(session.id)
+    for message in messages:
+        with st.chat_message(
+            message.role if message.role in {"user", "assistant"} else "assistant"
+        ):
+            st.write(message.content)
+            if message.role == "assistant" and message.source_map:
+                with st.expander("Sources"):
+                    for source in message.source_map:
+                        st.write(f"[{source['source_id']}] {source['citation']}")
+
+    result = st.session_state.get(f"last_qa_result_{session.id}")
+    if result is not None:
+        _render_qa_debug(result)
+
+    question = st.chat_input("Ask a question about the selected documents")
+    if not question:
+        return
+
+    try:
+        result = qa_service.answer_question(
+            workspace_id=workspace.id,
+            session_id=session.id,
+            question=question,
+            selected_document_ids=selected_document_ids,
+            api_key=api_key,
+            model=model,
+            rewrite_model=rewrite_model,
+            allow_outside_knowledge=allow_outside,
+            enable_query_rewrite=enable_rewrite,
+        )
+        st.session_state[f"last_qa_result_{session.id}"] = result
+        st.rerun()
+    except QAServiceError as exc:
+        st.error(str(exc))
+    except Exception as exc:
+        st.error(f"Chat request failed: {exc}")
+
+
+def _render_qa_debug(result: QAResult) -> None:
+    with st.expander("Latest answer sources and debug"):
+        st.write("Sources")
+        for source in result.sources:
+            st.write(f"[{source.source_id}] {source.citation}")
+            with st.expander(f"Chunk {source.chunk_id}"):
+                st.write(source.text)
+                st.write(
+                    {
+                        "dense_score": round(source.dense_score, 4),
+                        "sparse_score": round(source.sparse_score, 4),
+                        "fused_score": round(source.fused_score, 4),
+                    }
+                )
+        st.write(
+            {
+                "original_query": result.original_query,
+                "rewritten_query": result.rewritten_query,
+                "rewrite_skipped_reason": result.rewrite_skipped_reason,
+                "clarification_question": result.clarification_question,
+                "model_name": result.model_name,
+                "token_usage": {
+                    "input_tokens": result.token_usage.input_tokens,
+                    "output_tokens": result.token_usage.output_tokens,
+                    "total_tokens": result.token_usage.total_tokens,
+                },
+                "warnings": result.warnings,
+                "prompt_metadata": result.prompt_metadata,
+                "retrieval_metadata": result.retrieval_metadata,
+            }
+        )
 
 
 render()
