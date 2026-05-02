@@ -1,0 +1,86 @@
+"""SQLite initialization and connection helpers."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_normalized TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspaces_created_at
+ON workspaces(created_at);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('pdf', 'markdown')),
+    content_hash TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    page_count INTEGER,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    UNIQUE (workspace_id, content_hash),
+    UNIQUE (workspace_id, stored_filename)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_workspace_id
+ON documents(workspace_id);
+
+CREATE INDEX IF NOT EXISTS idx_documents_workspace_hash
+ON documents(workspace_id, content_hash);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('pdf', 'markdown')),
+    filename TEXT NOT NULL,
+    text TEXT NOT NULL,
+    page_start INTEGER,
+    page_end INTEGER,
+    heading_path TEXT,
+    approximate_token_count INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_workspace_id
+ON chunks(workspace_id);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_document_id
+ON chunks(document_id);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_workspace_document
+ON chunks(workspace_id, document_id);
+"""
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    """Open a SQLite connection with row mapping and foreign keys enabled."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+def initialize_database(db_path: Path) -> None:
+    """Create Phase 01 tables and indexes if they do not exist."""
+    with connect(db_path) as connection:
+        connection.executescript(SCHEMA_SQL)
