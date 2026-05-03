@@ -17,8 +17,12 @@ def test_auto_falls_back_to_cpu_when_cuda_unavailable() -> None:
 
 
 def test_explicit_cuda_requires_cuda() -> None:
-    with pytest.raises(EmbeddingDeviceError, match="CUDA is not available"):
+    with pytest.raises(EmbeddingDeviceError) as exc_info:
         resolve_embedding_device("cuda", cuda_available=lambda: False)
+    assert (
+        str(exc_info.value)
+        == "CUDA was requested but is not available in the current PyTorch environment."
+    )
 
 
 def test_invalid_embedding_device_is_rejected() -> None:

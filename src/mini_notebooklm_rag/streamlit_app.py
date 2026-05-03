@@ -20,28 +20,38 @@ from mini_notebooklm_rag.storage.repositories import (
     Workspace,
 )
 
+EMBEDDING_DEVICE_OPTIONS = ["auto", "cuda", "cpu"]
+
 
 def render() -> None:
     """Render workspace and document ingestion UI."""
     st.set_page_config(page_title="mini-notebooklm-rag", page_icon="MNR", layout="wide")
 
     settings = get_settings()
-    workspace_service = WorkspaceService(settings)
-    ingestion_service = IngestionService(settings)
-    chat_service = ChatService(settings)
-    retrieval_service: RetrievalService | None
-    try:
-        retrieval_service = RetrievalService(settings)
-    except EmbeddingDeviceError as exc:
-        retrieval_service = None
-        st.error(str(exc))
-
     st.title("mini-notebooklm-rag")
     st.caption("Phase 03: grounded QA and workspace chat over local retrieval")
     st.info(
         "Create a workspace, upload PDF or Markdown documents, build a local retrieval index, "
         "inspect retrieved chunks, and ask grounded questions with citations."
     )
+
+    requested_embedding_device = st.selectbox(
+        "Embedding device",
+        EMBEDDING_DEVICE_OPTIONS,
+        index=_embedding_device_index(settings.embedding_device),
+        help="auto uses CUDA when available and falls back to CPU. FAISS remains CPU-only.",
+    )
+    runtime_settings = settings_for_embedding_device(settings, requested_embedding_device)
+
+    workspace_service = WorkspaceService(runtime_settings)
+    ingestion_service = IngestionService(runtime_settings)
+    chat_service = ChatService(runtime_settings)
+    retrieval_service: RetrievalService | None
+    try:
+        retrieval_service = RetrievalService(runtime_settings)
+    except EmbeddingDeviceError as exc:
+        retrieval_service = None
+        st.error(str(exc))
 
     workspaces = workspace_service.list_workspaces()
     selected_workspace = _render_workspace_panel(workspace_service, workspaces)
@@ -59,12 +69,24 @@ def render() -> None:
         if retrieval_service is not None:
             _render_retrieval_panel(retrieval_service, selected_workspace, documents)
             st.divider()
-            qa_service = QAService(settings, chat_service, retrieval_service)
+            qa_service = QAService(runtime_settings, chat_service, retrieval_service)
             _render_chat_panel(qa_service, chat_service, selected_workspace, documents)
 
     st.divider()
     st.subheader("Later phases")
     st.warning("Summaries, evaluation, MLflow, and deployment are Phase 04+.")
+
+
+def settings_for_embedding_device(settings, requested_device: str):
+    """Return a settings copy with the UI-selected embedding device."""
+    return settings.model_copy(update={"embedding_device": requested_device})
+
+
+def _embedding_device_index(requested_device: str) -> int:
+    requested = requested_device.strip().lower()
+    if requested in EMBEDDING_DEVICE_OPTIONS:
+        return EMBEDDING_DEVICE_OPTIONS.index(requested)
+    return EMBEDDING_DEVICE_OPTIONS.index("auto")
 
 
 def _render_workspace_panel(
@@ -473,4 +495,5 @@ def _render_qa_debug(result: QAResult) -> None:
         )
 
 
-render()
+if __name__ == "__main__":
+    render()

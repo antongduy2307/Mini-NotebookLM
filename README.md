@@ -86,6 +86,25 @@ Copy `.env.example` to `.env` for local overrides when needed. Do not commit `.e
 
 API keys may be supplied through `.env` or the temporary Streamlit password input. Phase 03 does not implement saved local API keys. Future saved keys must remain outside SQLite, include an owner name, and be stored only in a Git-ignored local secrets file after a later approved phase.
 
+### Embedding Device
+
+`EMBEDDING_DEVICE` controls only the local `sentence-transformers` embedding model:
+
+- `EMBEDDING_DEVICE=auto` prefers CUDA when PyTorch reports CUDA as available, otherwise CPU.
+- `EMBEDDING_DEVICE=cuda` requires CUDA-enabled PyTorch and a compatible NVIDIA driver.
+- `EMBEDDING_DEVICE=cpu` forces CPU embeddings.
+
+FAISS remains CPU-only through `faiss-cpu`. This project does not require the full CUDA Toolkit.
+The lockfile is configured for the PyTorch CUDA 12.6 wheel source on supported environments.
+Check the active environment with:
+
+```bash
+uv run python scripts/check_cuda.py
+```
+
+If CUDA is unavailable, first verify the NVIDIA driver with `nvidia-smi`, then rerun `uv sync`.
+Do not install NVIDIA system drivers or CUDA Toolkit as part of this project setup.
+
 ## Planning Documents
 
 - `docs/PROJECT_PLAN.md`

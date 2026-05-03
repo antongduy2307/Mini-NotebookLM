@@ -26,6 +26,8 @@ dist/
 
 # Test, lint, and type-check caches
 .pytest_cache/
+.pytest-tmp/
+.tmp/
 .ruff_cache/
 .mypy_cache/
 .uv-cache/

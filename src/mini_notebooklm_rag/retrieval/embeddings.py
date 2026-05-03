@@ -42,8 +42,7 @@ def resolve_embedding_device(
         if has_cuda:
             return "cuda"
         raise EmbeddingDeviceError(
-            "EMBEDDING_DEVICE=cuda was requested, but CUDA is not available. "
-            "Use EMBEDDING_DEVICE=auto or install a CUDA-enabled PyTorch environment."
+            "CUDA was requested but is not available in the current PyTorch environment."
         )
     raise EmbeddingDeviceError(
         f"EMBEDDING_DEVICE must be one of: auto, cpu, cuda. Received: {requested_device!r}."
