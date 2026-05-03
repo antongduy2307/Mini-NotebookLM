@@ -109,6 +109,51 @@ ON chat_messages(session_id, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_workspace_created
 ON chat_messages(workspace_id, created_at);
+
+CREATE TABLE IF NOT EXISTS document_summaries (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    document_content_hash TEXT NOT NULL,
+    summary_mode TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    config_hash TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    summary_text TEXT NOT NULL,
+    source_chunk_count INTEGER NOT NULL,
+    source_character_count INTEGER NOT NULL,
+    is_partial INTEGER NOT NULL DEFAULT 0,
+    warnings TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    total_tokens INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    UNIQUE (
+        document_id,
+        document_content_hash,
+        summary_mode,
+        model_name,
+        prompt_version,
+        config_hash
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_summaries_workspace_document
+ON document_summaries(workspace_id, document_id);
+
+CREATE INDEX IF NOT EXISTS idx_document_summaries_cache_key
+ON document_summaries(
+    document_id,
+    document_content_hash,
+    summary_mode,
+    model_name,
+    prompt_version,
+    config_hash
+);
 """
 
 

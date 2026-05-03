@@ -2,9 +2,9 @@
 
 Local-first NotebookLM-like RAG application for portfolio and learning purposes.
 
-Current status: Phase 03 grounded QA and chat. The repository contains packaging, typed configuration, local workspace persistence, PDF/Markdown ingestion, approximate chunking, local FAISS/BM25 retrieval, OpenAI-backed grounded QA, workspace chat sessions, baseline tests, and planning/review documents.
+Current status: Phase 04 per-document summaries. The repository contains packaging, typed configuration, local workspace persistence, PDF/Markdown ingestion, approximate chunking, local FAISS/BM25 retrieval, OpenAI-backed grounded QA, workspace chat sessions, SQLite-cached per-document summaries, baseline tests, and planning/review documents.
 
-## Phase 03 Scope
+## Phase 04 Scope
 
 Included:
 
@@ -33,16 +33,21 @@ Included:
 - Query rewriting using only the current chat session history.
 - SQLite chat sessions and chat messages with compact source/retrieval/prompt metadata.
 - Streamlit chat panel with temporary API key input, chat history, source list, and dev/debug details.
+- Per-document overview summary generation using the existing OpenAI client wrapper.
+- SQLite-only summary cache keyed by document hash, summary mode, model, prompt version, and config hash.
+- Direct and map-reduce summary flow with approximate character/chunk budgets.
+- Manual Summary UI plus optional `AUTO_SUMMARY=true` orchestration after UI uploads.
 - Tests for storage, parsers, chunking, repositories, and ingestion cleanup.
 - Tests for embedding device behavior, fake embeddings, FAISS, BM25, fusion, citations, and retrieval service behavior.
 - Tests for OpenAI wrapper mocking, prompt construction, source mapping, grounded shortcuts, query rewriting, and chat persistence.
+- Tests for summary grouping, prompt construction, cache behavior, skipped states, token metadata, and delete cascades.
 
 Not included:
 
 - API key persistence.
 - Streaming responses.
 - Saved local API key manager or keyring integration.
-- Summaries, evaluation UI, or MLflow.
+- Cross-document synthesis, evaluation UI, or MLflow.
 - LangChain or LlamaIndex.
 
 ## Setup
@@ -57,7 +62,13 @@ uv sync
 uv run app
 ```
 
-The app command starts the Streamlit workspace/document ingestion, retrieval debug UI, and chat UI. It may create `storage/app.db`, workspace/document runtime files, FAISS index files when the user clicks the rebuild control, and chat records in SQLite. It must not create summary artifacts, eval artifacts, log artifacts, or secret files.
+If the console launcher needs to be bypassed during debugging, run Streamlit directly:
+
+```bash
+uv run streamlit run src/mini_notebooklm_rag/streamlit_app.py
+```
+
+The app command starts the Streamlit workspace/document ingestion, summary, retrieval debug, and chat UI. It may create `storage/app.db`, workspace/document runtime files, FAISS index files when the user clicks the rebuild control, summary rows in SQLite, and chat records in SQLite. It must not create summary JSON artifacts, eval artifacts, log artifacts, or secret files.
 
 Building a workspace index creates runtime files under:
 
@@ -70,7 +81,9 @@ These files are local runtime artifacts and remain ignored by Git.
 
 The first real embedding model use may download the configured local model through `sentence-transformers`. Tests use fake embeddings and do not download a model.
 
-Phase 03 chat uses the OpenAI Responses API only when an API key is available from `.env` or temporary Streamlit UI input. Temporary UI keys live only in `st.session_state` and are not written to SQLite or local files.
+Chat and summaries use the OpenAI Responses API only when an API key is available from `.env` or temporary Streamlit UI input. Temporary UI keys live only in `st.session_state` and are not written to SQLite or local files.
+
+Summaries are per-document overview summaries only in Phase 04. `AUTO_SUMMARY=false` remains the default. When enabled, auto-summary runs only after successful Streamlit uploads and does not run inside the ingestion service.
 
 ## Validate
 
@@ -108,8 +121,11 @@ Do not install NVIDIA system drivers or CUDA Toolkit as part of this project set
 ## Planning Documents
 
 - `docs/PROJECT_PLAN.md`
-- `docs/phases/PHASE_00_REPO_SCAFFOLD_PLAN.md`
-- `docs/phases/PHASE_01_INGESTION_PLAN.md`
+- `docs/output_prompt/PHASE_00_REPO_SCAFFOLD_PLAN.md`
+- `docs/output_prompt/PHASE_01_INGESTION_PLAN.md`
 - `docs/output_prompt/PHASE_02_RETRIEVAL_PLAN_REVIEW.md`
 - `docs/output_prompt/PHASE_02_IMPLEMENTATION_REVIEW_DIGEST.md`
 - `docs/output_prompt/PHASE_03_QA_CHAT_PLAN_REVIEW.md`
+- `docs/output_prompt/PHASE_03_IMPLEMENTATION_REVIEW_DIGEST.md`
+- `docs/output_prompt/PHASE_04_SUMMARY_PLAN_REVIEW.md`
+- `docs/output_prompt/PHASE_04_IMPLEMENTATION_REVIEW_DIGEST.md`

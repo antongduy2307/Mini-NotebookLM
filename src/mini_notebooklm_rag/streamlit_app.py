@@ -19,6 +19,8 @@ from mini_notebooklm_rag.storage.repositories import (
     DuplicateWorkspaceError,
     Workspace,
 )
+from mini_notebooklm_rag.summary import SUMMARY_MODE_OVERVIEW
+from mini_notebooklm_rag.summary.service import SummaryService
 
 EMBEDDING_DEVICE_OPTIONS = ["auto", "cuda", "cpu"]
 
@@ -29,11 +31,12 @@ def render() -> None:
 
     settings = get_settings()
     st.title("mini-notebooklm-rag")
-    st.caption("Phase 03: grounded QA and workspace chat over local retrieval")
+    st.caption("Phase 04: per-document summaries, grounded QA, and local retrieval")
     st.info(
         "Create a workspace, upload PDF or Markdown documents, build a local retrieval index, "
-        "inspect retrieved chunks, and ask grounded questions with citations."
+        "summarize individual documents, and ask grounded questions with citations."
     )
+    api_key = _render_api_key_input(settings)
 
     requested_embedding_device = st.selectbox(
         "Embedding device",
@@ -46,6 +49,7 @@ def render() -> None:
     workspace_service = WorkspaceService(runtime_settings)
     ingestion_service = IngestionService(runtime_settings)
     chat_service = ChatService(runtime_settings)
+    summary_service = SummaryService(runtime_settings)
     retrieval_service: RetrievalService | None
     try:
         retrieval_service = RetrievalService(runtime_settings)
@@ -63,23 +67,56 @@ def render() -> None:
         documents = _render_document_panel(
             ingestion_service,
             workspace_service,
+            summary_service,
             selected_workspace,
+            api_key,
+            runtime_settings.auto_summary,
+            runtime_settings.openai_model,
         )
+        st.divider()
+        _render_summary_panel(summary_service, selected_workspace, documents, api_key)
         st.divider()
         if retrieval_service is not None:
             _render_retrieval_panel(retrieval_service, selected_workspace, documents)
             st.divider()
             qa_service = QAService(runtime_settings, chat_service, retrieval_service)
-            _render_chat_panel(qa_service, chat_service, selected_workspace, documents)
+            _render_chat_panel(
+                qa_service,
+                chat_service,
+                selected_workspace,
+                documents,
+                api_key,
+                runtime_settings,
+            )
 
     st.divider()
     st.subheader("Later phases")
-    st.warning("Summaries, evaluation, MLflow, and deployment are Phase 04+.")
+    st.warning("Evaluation, MLflow, and deployment are Phase 05+.")
 
 
 def settings_for_embedding_device(settings, requested_device: str):
     """Return a settings copy with the UI-selected embedding device."""
     return settings.model_copy(update={"embedding_device": requested_device})
+
+
+def _render_api_key_input(settings) -> str:
+    temporary_key = st.text_input(
+        "Temporary OpenAI API key",
+        type="password",
+        key="temporary_openai_api_key",
+        help=(
+            "Used for chat and summaries in this Streamlit session only. "
+            "It is not written to SQLite or files."
+        ),
+    )
+    api_key = temporary_key or settings.openai_api_key
+    if temporary_key:
+        st.caption("OpenAI API key source: temporary session input")
+    elif settings.openai_api_key:
+        st.caption("OpenAI API key source: .env")
+    else:
+        st.caption("OpenAI API key source: not configured")
+    return api_key
 
 
 def _embedding_device_index(requested_device: str) -> int:
@@ -152,7 +189,11 @@ def _render_workspace_panel(
 def _render_document_panel(
     ingestion_service: IngestionService,
     workspace_service: WorkspaceService,
+    summary_service: SummaryService,
     workspace: Workspace,
+    api_key: str,
+    auto_summary: bool,
+    summary_model: str,
 ) -> list[DocumentRecord]:
     refreshed_workspace = workspace_service.get_workspace(workspace.id)
     if refreshed_workspace is None:
@@ -160,6 +201,16 @@ def _render_document_panel(
         return []
 
     st.subheader("Documents")
+    auto_summary_status_key = f"auto_summary_status_{workspace.id}"
+    if auto_summary_status_key in st.session_state:
+        status = st.session_state.pop(auto_summary_status_key)
+        if status["level"] == "success":
+            st.success(status["message"])
+        elif status["level"] == "warning":
+            st.warning(status["message"])
+        else:
+            st.error(status["message"])
+
     uploaded_file = st.file_uploader(
         "Upload PDF or Markdown",
         type=["pdf", "md", "markdown"],
@@ -178,6 +229,23 @@ def _render_document_panel(
                 st.success(result.message)
                 for warning in result.warnings:
                     st.warning(warning)
+                if auto_summary and result.document is not None:
+                    summary_result = summary_service.generate_for_document(
+                        result.document.id,
+                        api_key=api_key,
+                        model_name=summary_model,
+                    )
+                    st.session_state[auto_summary_status_key] = {
+                        "level": "success"
+                        if summary_result.status in {"cached", "generated"}
+                        else "warning"
+                        if summary_result.status == "skipped"
+                        else "error",
+                        "message": (
+                            f"Auto-summary for {result.document.display_name}: "
+                            f"{summary_result.message}"
+                        ),
+                    }
             st.rerun()
         except IngestionError as exc:
             st.error(str(exc))
@@ -215,6 +283,111 @@ def _render_document_panel(
                 st.rerun()
 
     return documents
+
+
+def _render_summary_panel(
+    summary_service: SummaryService,
+    workspace: Workspace,
+    documents: list[DocumentRecord],
+    api_key: str,
+) -> None:
+    st.subheader("Document summary")
+    st.caption("Generate or view cached per-document overview summaries.")
+
+    if not documents:
+        st.caption("Upload documents before generating summaries.")
+        return
+
+    document_options = {
+        f"{document.display_name} ({document.id[:8]})": document for document in documents
+    }
+    selected_label = st.selectbox(
+        "Summary document",
+        list(document_options),
+        key=f"summary_document_{workspace.id}",
+    )
+    document = document_options[selected_label]
+    summary_mode = st.selectbox(
+        "Summary mode",
+        [SUMMARY_MODE_OVERVIEW],
+        key=f"summary_mode_{workspace.id}",
+        help="Only overview summaries are implemented in Phase 04.",
+    )
+    model_name = st.text_input(
+        "Summary model",
+        value=summary_service.settings.openai_model,
+        key=f"summary_model_{workspace.id}",
+    )
+
+    cached = summary_service.get_cached_summary(
+        document.id,
+        summary_mode=summary_mode,
+        model_name=model_name,
+    )
+    if cached is None:
+        st.info("Summary status: no cached summary.")
+    else:
+        st.success("Summary status: cached.")
+        _render_cached_summary(cached)
+
+    generate_col, regenerate_col = st.columns(2)
+    if generate_col.button("Generate summary", key=f"generate_summary_{document.id}"):
+        result = summary_service.generate_for_document(
+            document.id,
+            api_key=api_key,
+            model_name=model_name,
+            summary_mode=summary_mode,
+            regenerate=False,
+        )
+        _render_summary_result(result)
+        if result.status in {"cached", "generated"}:
+            st.rerun()
+
+    if regenerate_col.button("Regenerate summary", key=f"regenerate_summary_{document.id}"):
+        result = summary_service.generate_for_document(
+            document.id,
+            api_key=api_key,
+            model_name=model_name,
+            summary_mode=summary_mode,
+            regenerate=True,
+        )
+        _render_summary_result(result)
+        if result.status == "generated":
+            st.rerun()
+
+
+def _render_summary_result(result) -> None:
+    if result.status == "generated":
+        st.success(result.message)
+    elif result.status == "cached":
+        st.info(result.message)
+    elif result.status == "skipped":
+        st.warning(result.message)
+    else:
+        st.error(result.message)
+
+    if result.summary is not None:
+        _render_cached_summary(result.summary)
+
+
+def _render_cached_summary(summary) -> None:
+    st.markdown(summary.summary_text)
+    st.write(
+        {
+            "model_name": summary.model_name,
+            "summary_mode": summary.summary_mode,
+            "prompt_version": summary.prompt_version,
+            "source_chunk_count": summary.source_chunk_count,
+            "source_character_count": summary.source_character_count,
+            "is_partial": summary.is_partial,
+            "input_tokens": summary.input_tokens,
+            "output_tokens": summary.output_tokens,
+            "total_tokens": summary.total_tokens,
+            "updated_at": summary.updated_at,
+        }
+    )
+    for warning in summary.warnings:
+        st.warning(warning)
 
 
 def _render_retrieval_panel(
@@ -334,24 +507,11 @@ def _render_chat_panel(
     chat_service: ChatService,
     workspace: Workspace,
     documents: list[DocumentRecord],
+    api_key: str,
+    settings,
 ) -> None:
     st.subheader("Chat")
     st.caption("Ask grounded questions over selected documents with source citations.")
-
-    settings = get_settings()
-    temporary_key = st.text_input(
-        "Temporary OpenAI API key",
-        type="password",
-        key="temporary_openai_api_key",
-        help="Stored only in Streamlit session state. It is not written to SQLite or files.",
-    )
-    api_key = temporary_key or settings.openai_api_key
-    if temporary_key:
-        st.caption("API key source: temporary session input")
-    elif settings.openai_api_key:
-        st.caption("API key source: .env")
-    else:
-        st.caption("API key source: not configured")
 
     model = st.text_input("Generation model", value=settings.openai_model)
     rewrite_model = st.text_input("Query rewrite model", value=settings.openai_query_rewrite_model)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mini_notebooklm_rag import __version__
-from mini_notebooklm_rag.app import main
+from mini_notebooklm_rag.app import build_streamlit_command, main
 from mini_notebooklm_rag.config import Settings
 
 ENV_NAMES = (
@@ -62,3 +62,11 @@ def test_auto_summary_default_is_false() -> None:
 
 def test_app_launcher_exposes_main_without_starting_streamlit() -> None:
     assert callable(main)
+
+
+def test_app_launcher_uses_python_module_subprocess() -> None:
+    command = build_streamlit_command(["--logger.level=debug"])
+
+    assert command[1:4] == ["-m", "streamlit", "run"]
+    assert command[-1] == "--logger.level=debug"
+    assert command[4].endswith("streamlit_app.py")

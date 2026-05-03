@@ -1,23 +1,32 @@
-"""Console entrypoint for the scaffold-only Streamlit app."""
+"""Console entrypoint for the Streamlit app."""
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
-from streamlit.web import cli as streamlit_cli
 
-
-def main() -> None:
-    """Launch the Streamlit UI shell for `uv run app`."""
+def build_streamlit_command(extra_args: list[str] | None = None) -> list[str]:
+    """Build the subprocess command used by `uv run app`."""
     streamlit_app = Path(__file__).with_name("streamlit_app.py")
-    sys.argv = [
+    return [
+        sys.executable,
+        "-m",
         "streamlit",
         "run",
         str(streamlit_app),
-        "--server.headless=true",
+        *(extra_args or []),
     ]
-    streamlit_cli.main()
+
+
+def main() -> None:
+    """Launch the Streamlit UI in a separate process for `uv run app`."""
+    extra_args = sys.argv[1:]
+    if extra_args[:1] == ["--"]:
+        extra_args = extra_args[1:]
+    completed = subprocess.run(build_streamlit_command(extra_args), check=False)
+    raise SystemExit(completed.returncode)
 
 
 if __name__ == "__main__":
