@@ -154,6 +154,90 @@ ON document_summaries(
     prompt_version,
     config_hash
 );
+
+CREATE TABLE IF NOT EXISTS eval_cases (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    selected_document_ids TEXT NOT NULL,
+    expected_filename TEXT NOT NULL,
+    expected_page INTEGER,
+    expected_page_start INTEGER,
+    expected_page_end INTEGER,
+    expected_answer TEXT,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_cases_workspace_updated
+ON eval_cases(workspace_id, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_eval_cases_workspace_filename
+ON eval_cases(workspace_id, expected_filename);
+
+CREATE TABLE IF NOT EXISTS eval_runs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+    top_k INTEGER NOT NULL,
+    dense_weight REAL NOT NULL,
+    sparse_weight REAL NOT NULL,
+    embedding_model TEXT NOT NULL,
+    embedding_device TEXT NOT NULL,
+    eval_case_count INTEGER NOT NULL,
+    filename_hit_count INTEGER NOT NULL,
+    filename_hit_rate REAL NOT NULL,
+    page_evaluable_count INTEGER NOT NULL,
+    page_hit_count INTEGER NOT NULL,
+    page_hit_rate REAL,
+    page_range_evaluable_count INTEGER NOT NULL,
+    page_range_hit_count INTEGER NOT NULL,
+    page_range_hit_rate REAL,
+    mean_reciprocal_rank REAL,
+    mlflow_run_id TEXT,
+    warnings TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_runs_workspace_created
+ON eval_runs(workspace_id, created_at);
+
+CREATE TABLE IF NOT EXISTS eval_run_items (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    case_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    selected_document_ids TEXT NOT NULL,
+    expected_filename TEXT NOT NULL,
+    expected_page INTEGER,
+    expected_page_start INTEGER,
+    expected_page_end INTEGER,
+    filename_hit INTEGER NOT NULL,
+    page_hit INTEGER,
+    page_range_hit INTEGER,
+    filename_hit_rank INTEGER,
+    page_hit_rank INTEGER,
+    page_range_hit_rank INTEGER,
+    reciprocal_rank REAL,
+    retrieved_results TEXT NOT NULL,
+    retrieval_trace TEXT NOT NULL,
+    warnings TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES eval_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (case_id) REFERENCES eval_cases(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_run_items_run_id
+ON eval_run_items(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_eval_run_items_case_id
+ON eval_run_items(case_id);
 """
 
 
@@ -170,3 +254,27 @@ def initialize_database(db_path: Path) -> None:
     """Create application tables and indexes if they do not exist."""
     with connect(db_path) as connection:
         connection.executescript(SCHEMA_SQL)
+        _ensure_column(
+            connection,
+            "eval_runs",
+            "page_evaluable_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            connection,
+            "eval_runs",
+            "page_range_evaluable_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_definition: str,
+) -> None:
+    """Add a missing additive schema column for early local databases."""
+    columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})")}
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")

@@ -25,5 +25,8 @@ def test_initialize_database_is_idempotent(tmp_path) -> None:
         "chat_sessions",
         "chat_messages",
         "document_summaries",
+        "eval_cases",
+        "eval_runs",
+        "eval_run_items",
     }.issubset(tables)
     assert foreign_keys == 1

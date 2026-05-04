@@ -2,7 +2,7 @@
 
 Local-first NotebookLM-like RAG application for portfolio and learning purposes.
 
-Current status: Phase 04 per-document summaries. The repository contains packaging, typed configuration, local workspace persistence, PDF/Markdown ingestion, approximate chunking, local FAISS/BM25 retrieval, OpenAI-backed grounded QA, workspace chat sessions, SQLite-cached per-document summaries, baseline tests, and planning/review documents.
+Current status: Phase 05 retrieval evaluation. The repository contains packaging, typed configuration, local workspace persistence, PDF/Markdown ingestion, approximate chunking, local FAISS/BM25 retrieval, OpenAI-backed grounded QA, workspace chat sessions, SQLite-cached per-document summaries, workspace-specific retrieval evaluation, baseline tests, and planning/review documents.
 
 ## Phase 04 Scope
 
@@ -37,18 +37,44 @@ Included:
 - SQLite-only summary cache keyed by document hash, summary mode, model, prompt version, and config hash.
 - Direct and map-reduce summary flow with approximate character/chunk budgets.
 - Manual Summary UI plus optional `AUTO_SUMMARY=true` orchestration after UI uploads.
+- Workspace-specific retrieval evaluation cases and local eval runs.
+- JSON import/export for eval cases.
+- Optional MLflow logging through the `observability` extra.
 - Tests for storage, parsers, chunking, repositories, and ingestion cleanup.
 - Tests for embedding device behavior, fake embeddings, FAISS, BM25, fusion, citations, and retrieval service behavior.
 - Tests for OpenAI wrapper mocking, prompt construction, source mapping, grounded shortcuts, query rewriting, and chat persistence.
 - Tests for summary grouping, prompt construction, cache behavior, skipped states, token metadata, and delete cascades.
+- Tests for eval case repositories, JSON import/export, metrics, runner behavior, and optional MLflow logging.
 
 Not included:
 
 - API key persistence.
 - Streaming responses.
 - Saved local API key manager or keyring integration.
-- Cross-document synthesis, evaluation UI, or MLflow.
+- Cross-document synthesis, answer-quality judging, or deployment.
 - LangChain or LlamaIndex.
+
+## Phase 05 Evaluation
+
+The app includes workspace-specific retrieval evaluation cases and local eval
+runs. Evaluation uses the existing retrieval service only; it does not call
+OpenAI and does not judge answer quality.
+
+MLflow observability is optional. The default environment does not install
+MLflow. To enable optional logging, install the observability extra and set a
+tracking URI:
+
+```bash
+uv sync --extra observability
+```
+
+```env
+MLFLOW_TRACKING_URI=file:./storage/mlruns
+```
+
+If `MLFLOW_TRACKING_URI` is empty, evaluation still runs locally and shows
+MLflow as disabled. MLflow artifacts are compact and exclude full chunk text by
+default.
 
 ## Setup
 
@@ -58,8 +84,16 @@ uv sync
 
 ## Run
 
+Default app launcher:
+
 ```bash
 uv run app
+```
+
+Debug launcher with Streamlit logging:
+
+```bash
+uv run app -- --logger.level=debug
 ```
 
 If the console launcher needs to be bypassed during debugging, run Streamlit directly:
@@ -67,6 +101,8 @@ If the console launcher needs to be bypassed during debugging, run Streamlit dir
 ```bash
 uv run streamlit run src/mini_notebooklm_rag/streamlit_app.py
 ```
+
+Streamlit file watching is disabled in `.streamlit/config.toml` to avoid dependency watcher tracebacks from optional `transformers` vision modules. Do not add `torchvision` just to satisfy those optional imports.
 
 The app command starts the Streamlit workspace/document ingestion, summary, retrieval debug, and chat UI. It may create `storage/app.db`, workspace/document runtime files, FAISS index files when the user clicks the rebuild control, summary rows in SQLite, and chat records in SQLite. It must not create summary JSON artifacts, eval artifacts, log artifacts, or secret files.
 
