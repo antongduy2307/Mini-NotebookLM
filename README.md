@@ -1,86 +1,150 @@
 # mini-notebooklm-rag
 
-Local-first NotebookLM-like RAG application for portfolio and learning purposes.
+A local-first, NotebookLM-style RAG application built for learning and portfolio review. It demonstrates the core mechanics of document ingestion, chunking, hybrid retrieval, grounded QA, summaries, and retrieval evaluation without hiding the pipeline behind LangChain or LlamaIndex.
 
-Current status: Phase 05 retrieval evaluation. The repository contains packaging, typed configuration, local workspace persistence, PDF/Markdown ingestion, approximate chunking, local FAISS/BM25 retrieval, OpenAI-backed grounded QA, workspace chat sessions, SQLite-cached per-document summaries, workspace-specific retrieval evaluation, baseline tests, and planning/review documents.
+## Why This Exists
 
-## Phase 04 Scope
+The project is intentionally small enough to inspect and large enough to show real engineering tradeoffs:
 
-Included:
+- local document storage and SQLite metadata
+- PDF/Markdown parsing
+- local embeddings and FAISS indexing
+- BM25 sparse retrieval
+- weighted hybrid retrieval
+- OpenAI-backed grounded answers with citations
+- per-document summary caching
+- retrieval evaluation with optional MLflow observability
 
-- `uv` project metadata.
-- `src/` package layout.
-- `uv run app` console command.
-- Streamlit UI for workspace and document ingestion.
-- Typed settings through `pydantic-settings`.
-- `.env.example` with planned settings and no real secrets.
-- SQLite metadata for workspaces, documents, and chunks.
-- Local workspace directories and stored original documents.
-- PDF text extraction with page metadata.
-- Markdown parsing with heading metadata.
-- Approximate dependency-free chunking.
-- Duplicate upload detection by SHA-256 hash per workspace.
-- Local embedding wrapper through `sentence-transformers`.
-- CUDA-first `auto` embedding device selection with CPU fallback.
-- One FAISS dense vector index per workspace.
-- In-memory BM25 rebuilt from SQLite chunks.
-- Weighted hybrid retrieval over up to 3 selected documents.
+It is single-user and local-first by design.
+
+## Features
+
+- Workspace create/select/delete.
+- PDF and Markdown upload.
+- Duplicate upload detection by SHA-256 hash.
+- Original file preservation under local workspace storage.
+- PDF page metadata and Markdown heading metadata.
+- Approximate configurable chunking.
+- Local embedding model through `sentence-transformers`.
+- Embedding device selection: `auto`, `cuda`, or `cpu`.
+- One FAISS CPU index per workspace.
+- BM25 rebuilt from SQLite chunks.
+- Hybrid retrieval over up to 3 selected documents.
 - PDF and Markdown citation formatting.
-- Streamlit retrieval debug panel.
-- OpenAI Responses API wrapper for non-streaming answer generation.
-- Grounded-only QA by default with `[S#]` inline source markers.
-- Optional outside-knowledge mode with separated document and outside-document sections.
-- Query rewriting using only the current chat session history.
-- SQLite chat sessions and chat messages with compact source/retrieval/prompt metadata.
-- Streamlit chat panel with temporary API key input, chat history, source list, and dev/debug details.
-- Per-document overview summary generation using the existing OpenAI client wrapper.
-- SQLite-only summary cache keyed by document hash, summary mode, model, prompt version, and config hash.
-- Direct and map-reduce summary flow with approximate character/chunk budgets.
-- Manual Summary UI plus optional `AUTO_SUMMARY=true` orchestration after UI uploads.
-- Workspace-specific retrieval evaluation cases and local eval runs.
-- JSON import/export for eval cases.
+- Grounded chat with `[S#]` source markers.
+- Optional query rewriting using only the current chat session.
+- Optional outside-knowledge answer mode with explicit separation.
+- SQLite-backed chat history.
+- Per-document overview summaries with SQLite cache.
+- Retrieval evaluation cases, JSON import/export, and local eval runs.
 - Optional MLflow logging through the `observability` extra.
-- Tests for storage, parsers, chunking, repositories, and ingestion cleanup.
-- Tests for embedding device behavior, fake embeddings, FAISS, BM25, fusion, citations, and retrieval service behavior.
-- Tests for OpenAI wrapper mocking, prompt construction, source mapping, grounded shortcuts, query rewriting, and chat persistence.
-- Tests for summary grouping, prompt construction, cache behavior, skipped states, token metadata, and delete cascades.
-- Tests for eval case repositories, JSON import/export, metrics, runner behavior, and optional MLflow logging.
 
-Not included:
+## Architecture Summary
 
-- API key persistence.
-- Streaming responses.
-- Saved local API key manager or keyring integration.
-- Cross-document synthesis, answer-quality judging, or deployment.
-- LangChain or LlamaIndex.
-
-## Phase 05 Evaluation
-
-The app includes workspace-specific retrieval evaluation cases and local eval
-runs. Evaluation uses the existing retrieval service only; it does not call
-OpenAI and does not judge answer quality.
-
-MLflow observability is optional. The default environment does not install
-MLflow. To enable optional logging, install the observability extra and set a
-tracking URI:
-
-```bash
-uv sync --extra observability
+```mermaid
+flowchart LR
+  UI["Streamlit UI"] --> Ingestion["Ingestion Service"]
+  UI --> Retrieval["Retrieval Service"]
+  UI --> QA["QA Service"]
+  UI --> Summary["Summary Service"]
+  UI --> Eval["Evaluation Runner"]
+  Ingestion --> SQLite["SQLite metadata/chunks"]
+  Ingestion --> Files["Local workspace files"]
+  Retrieval --> SQLite
+  Retrieval --> FAISS["FAISS index per workspace"]
+  Retrieval --> BM25["BM25 rebuilt in memory"]
+  QA --> Retrieval
+  QA --> OpenAI["OpenAI Responses API"]
+  Summary --> OpenAI
+  Summary --> SQLite
+  Eval --> Retrieval
+  Eval --> SQLite
+  Eval -. optional .-> MLflow["MLflow"]
 ```
 
-```env
-MLFLOW_TRACKING_URI=file:./storage/mlruns
-```
+## Tech Stack
 
-If `MLFLOW_TRACKING_URI` is empty, evaluation still runs locally and shows
-MLflow as disabled. MLflow artifacts are compact and exclude full chunk text by
-default.
+- Python `>=3.11,<3.13`
+- `uv` for project and environment workflow
+- Streamlit UI
+- SQLite metadata store
+- PyMuPDF PDF extraction
+- `markdown-it-py` Markdown parsing
+- `sentence-transformers` embeddings
+- PyTorch for embedding device support
+- `faiss-cpu` dense vector index
+- `rank-bm25` sparse retrieval
+- OpenAI SDK for QA, query rewrite, and summaries
+- Optional MLflow for eval batch observability
+- pytest and Ruff for validation
 
 ## Setup
 
 ```bash
 uv sync
 ```
+
+Copy `.env.example` to `.env` only when you need local overrides.
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Do not commit `.env`, `.env.local`, `.local/`, or runtime `storage/` data.
+
+## Environment Variables
+
+Important settings:
+
+- `OPENAI_API_KEY=`: optional; needed only for chat/query rewrite/summaries.
+- `OPENAI_MODEL=gpt-4.1-nano`: default generation model.
+- `OPENAI_QUERY_REWRITE_MODEL=gpt-4.1-nano`: default rewrite model.
+- `EMBEDDING_MODEL_NAME=BAAI/bge-base-en-v1.5`: default local embedding model.
+- `EMBEDDING_DEVICE=auto`: uses CUDA when PyTorch reports CUDA, otherwise CPU.
+- `APP_STORAGE_DIR=storage`: local runtime storage root.
+- `AUTO_SUMMARY=false`: cost-safe default.
+- `ENABLE_QUERY_REWRITE=true`: query rewrite default.
+- `ALLOW_OUTSIDE_KNOWLEDGE=false`: grounded-only default.
+- `RETRIEVAL_TOP_K=6`, `DENSE_WEIGHT=0.65`, `SPARSE_WEIGHT=0.35`: retrieval defaults.
+- `MLFLOW_TRACKING_URI=`: optional eval observability target.
+
+## CUDA Notes
+
+FAISS remains CPU-only through `faiss-cpu`. CUDA applies only to local embedding inference through PyTorch.
+
+Use:
+
+```env
+EMBEDDING_DEVICE=auto
+```
+
+to prefer CUDA when available and fall back to CPU. Use:
+
+```env
+EMBEDDING_DEVICE=cuda
+```
+
+to require CUDA and fail clearly if unavailable. Use:
+
+```env
+EMBEDDING_DEVICE=cpu
+```
+
+to force CPU.
+
+Check the active environment:
+
+```bash
+uv run python scripts/check_cuda.py
+```
+
+Do not install NVIDIA drivers or the full CUDA Toolkit as part of this project. If CUDA is unavailable, verify the system driver with `nvidia-smi`, then rerun `uv sync`.
 
 ## Run
 
@@ -90,78 +154,134 @@ Default app launcher:
 uv run app
 ```
 
-Debug launcher with Streamlit logging:
+Debug logging:
 
 ```bash
 uv run app -- --logger.level=debug
 ```
 
-If the console launcher needs to be bypassed during debugging, run Streamlit directly:
+Direct Streamlit fallback:
 
 ```bash
 uv run streamlit run src/mini_notebooklm_rag/streamlit_app.py
 ```
 
-Streamlit file watching is disabled in `.streamlit/config.toml` to avoid dependency watcher tracebacks from optional `transformers` vision modules. Do not add `torchvision` just to satisfy those optional imports.
+Streamlit file watching is disabled in `.streamlit/config.toml` to avoid watcher tracebacks from optional `transformers` vision modules. Do not add `torchvision` just to satisfy those optional imports.
 
-The app command starts the Streamlit workspace/document ingestion, summary, retrieval debug, and chat UI. It may create `storage/app.db`, workspace/document runtime files, FAISS index files when the user clicks the rebuild control, summary rows in SQLite, and chat records in SQLite. It must not create summary JSON artifacts, eval artifacts, log artifacts, or secret files.
+## Demo Workflow
 
-Building a workspace index creates runtime files under:
+1. Start `uv run app`.
+2. Create a workspace.
+3. Upload `examples/sample_notes.md`.
+4. Build/rebuild the workspace index.
+5. Run a retrieval debug query.
+6. Select up to 3 documents and start a chat.
+7. Add a temporary OpenAI API key or use `.env`.
+8. Ask a grounded question and inspect `[S#]` citations.
+9. Generate a document summary and confirm cache behavior.
+10. Import or create eval cases, then run an eval batch.
 
-```text
-storage/workspaces/<workspace_id>/indexes/faiss.index
-storage/workspaces/<workspace_id>/indexes/faiss_meta.json
+## Workflows
+
+### Ingestion
+
+Uploaded PDF/Markdown files are copied into local workspace storage. The app extracts structured text blocks, chunks them, and persists document/chunk metadata in SQLite.
+
+### Retrieval
+
+Build a workspace FAISS index manually from the retrieval debug panel. BM25 is rebuilt in memory from SQLite chunks. Hybrid retrieval combines normalized dense and sparse scores.
+
+### QA and Chat
+
+Chat uses selected documents, current-session history for optional query rewrite, and OpenAI Responses API for non-streaming generation. Grounded-only mode is the default.
+
+### Summaries
+
+Summaries are per-document overview summaries. `AUTO_SUMMARY=false` remains the default. Summary cache rows live in SQLite and prevent repeated API calls for unchanged document/config/model combinations.
+
+### Evaluation
+
+Evaluation is retrieval-only. It stores workspace-specific eval cases and eval runs in SQLite, supports JSON import/export, and computes hit@k by filename/page/page range. It does not call OpenAI.
+
+### Optional MLflow
+
+Install observability extras only when needed:
+
+```bash
+uv sync --extra observability
 ```
 
-These files are local runtime artifacts and remain ignored by Git.
+Configure:
 
-The first real embedding model use may download the configured local model through `sentence-transformers`. Tests use fake embeddings and do not download a model.
+```env
+MLFLOW_TRACKING_URI=file:./storage/mlruns
+```
 
-Chat and summaries use the OpenAI Responses API only when an API key is available from `.env` or temporary Streamlit UI input. Temporary UI keys live only in `st.session_state` and are not written to SQLite or local files.
+If `MLFLOW_TRACKING_URI` is empty or MLflow is not installed, local evaluation still works.
 
-Summaries are per-document overview summaries only in Phase 04. `AUTO_SUMMARY=false` remains the default. When enabled, auto-summary runs only after successful Streamlit uploads and does not run inside the ingestion service.
+## Security and Privacy
+
+- API keys may come from `.env` or the temporary Streamlit password input.
+- Temporary UI keys live only in `st.session_state`.
+- API keys are not stored in SQLite.
+- Saved local API-key manager is not implemented.
+- Uploaded documents, chunks, chat history, summaries, and eval results are local private runtime data.
+- MLflow artifacts may include eval questions and compact retrieval metadata. Use remote MLflow only when that is acceptable.
+- `.env`, `.env.local`, `.local/`, and `storage/*` are Git-ignored.
+
+## Cost Control
+
+- Ingestion, chunking, embeddings, indexing, retrieval, and retrieval evaluation are local.
+- Chat, query rewrite, and summaries call OpenAI only when invoked and when an API key is configured.
+- `AUTO_SUMMARY=false` is the default.
+- Summary cache avoids repeated calls for unchanged inputs.
+- Evaluation does not call OpenAI.
 
 ## Validate
 
 ```bash
+uv sync
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 ```
 
-## Configuration
-
-Copy `.env.example` to `.env` for local overrides when needed. Do not commit `.env`, `.env.local`, `.local/`, or runtime storage files.
-
-API keys may be supplied through `.env` or the temporary Streamlit password input. Phase 03 does not implement saved local API keys. Future saved keys must remain outside SQLite, include an owner name, and be stored only in a Git-ignored local secrets file after a later approved phase.
-
-### Embedding Device
-
-`EMBEDDING_DEVICE` controls only the local `sentence-transformers` embedding model:
-
-- `EMBEDDING_DEVICE=auto` prefers CUDA when PyTorch reports CUDA as available, otherwise CPU.
-- `EMBEDDING_DEVICE=cuda` requires CUDA-enabled PyTorch and a compatible NVIDIA driver.
-- `EMBEDDING_DEVICE=cpu` forces CPU embeddings.
-
-FAISS remains CPU-only through `faiss-cpu`. This project does not require the full CUDA Toolkit.
-The lockfile is configured for the PyTorch CUDA 12.6 wheel source on supported environments.
-Check the active environment with:
+Startup smoke:
 
 ```bash
-uv run python scripts/check_cuda.py
+uv run app
 ```
 
-If CUDA is unavailable, first verify the NVIDIA driver with `nvidia-smi`, then rerun `uv sync`.
-Do not install NVIDIA system drivers or CUDA Toolkit as part of this project setup.
+## Troubleshooting
 
-## Planning Documents
+Common issues:
 
-- `docs/PROJECT_PLAN.md`
-- `docs/output_prompt/PHASE_00_REPO_SCAFFOLD_PLAN.md`
-- `docs/output_prompt/PHASE_01_INGESTION_PLAN.md`
-- `docs/output_prompt/PHASE_02_RETRIEVAL_PLAN_REVIEW.md`
-- `docs/output_prompt/PHASE_02_IMPLEMENTATION_REVIEW_DIGEST.md`
-- `docs/output_prompt/PHASE_03_QA_CHAT_PLAN_REVIEW.md`
-- `docs/output_prompt/PHASE_03_IMPLEMENTATION_REVIEW_DIGEST.md`
-- `docs/output_prompt/PHASE_04_SUMMARY_PLAN_REVIEW.md`
-- `docs/output_prompt/PHASE_04_IMPLEMENTATION_REVIEW_DIGEST.md`
+- CUDA unavailable: run `uv run python scripts/check_cuda.py`.
+- FAISS index missing/stale: rebuild the workspace index.
+- OpenAI key missing: add `.env` key or temporary UI key.
+- MLflow unavailable: install `uv sync --extra observability` or leave disabled.
+- Streamlit watcher tracebacks: file watching is disabled by `.streamlit/config.toml`.
+
+## Roadmap
+
+Potential future phases:
+
+- Docker/deployment documentation.
+- Saved local API-key manager.
+- OCR/scanned PDF support.
+- Cross-document synthesis.
+- Answer-quality evaluation.
+- Optional reranking experiments.
+- Optional Ragas-style evaluation experiments.
+
+## Known Limitations
+
+- Single-user local app.
+- English-first parsing/retrieval assumptions.
+- Normal text PDFs only; no OCR.
+- Approximate chunk sizing, no tokenizer-dependent chunking.
+- FAISS deletion is handled by rebuild, not vector deletion.
+- No streaming responses.
+- No saved API-key manager.
+- No Docker/deployment yet.
+- No LangChain or LlamaIndex integration by design.

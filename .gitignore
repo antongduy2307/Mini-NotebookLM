@@ -38,3 +38,5 @@ htmlcov/
 .idea/
 .vscode/
 .omx/
+
+docs/

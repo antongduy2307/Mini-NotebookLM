@@ -1,3 +1,3 @@
-"""Phase 00 scaffold package for mini-notebooklm-rag."""
+"""Local-first NotebookLM-style RAG application package."""
 
 __version__ = "0.1.0"

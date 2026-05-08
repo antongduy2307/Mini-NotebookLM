@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "expected_answer": null,
+      "expected_filename": "sample_notes.md",
+      "expected_page": null,
+      "expected_page_end": null,
+      "expected_page_start": null,
+      "id": "sample-retrieval-stack",
+      "notes": "Filename-only Markdown eval case for the synthetic sample notes.",
+      "question": "What does the retrieval stack combine?",
+      "selected_document_ids": [
+        "replace-with-sample-document-id"
+      ]
+    },
+    {
+      "expected_answer": null,
+      "expected_filename": "sample_notes.md",
+      "expected_page": null,
+      "expected_page_end": null,
+      "expected_page_start": null,
+      "id": "sample-safety-practices",
+      "notes": "After import, edit selected documents in the UI if needed.",
+      "question": "How are API keys handled?",
+      "selected_document_ids": [
+        "replace-with-sample-document-id"
+      ]
+    }
+  ],
+  "format_version": 1,
+  "workspace_id": "example-workspace"
+}

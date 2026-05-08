@@ -1,4 +1,4 @@
-"""Minimal logging setup for the Phase 00 scaffold."""
+"""Application logging setup."""
 
 from __future__ import annotations
 

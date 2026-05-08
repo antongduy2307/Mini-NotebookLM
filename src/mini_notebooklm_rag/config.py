@@ -1,4 +1,4 @@
-"""Typed application settings for the Phase 00 scaffold."""
+"""Typed application settings."""
 
 from __future__ import annotations
 
