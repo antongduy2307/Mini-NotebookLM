@@ -10,6 +10,7 @@ from mini_notebooklm_rag.chat.service import ChatService
 from mini_notebooklm_rag.config import get_settings
 from mini_notebooklm_rag.evaluation.repositories import EvaluationRepository
 from mini_notebooklm_rag.ingestion.service import IngestionService, WorkspaceService
+from mini_notebooklm_rag.learning.service import LearningService
 from mini_notebooklm_rag.qa.service import QAService
 from mini_notebooklm_rag.retrieval.embeddings import EmbeddingDeviceError
 from mini_notebooklm_rag.retrieval.models import IndexStatus
@@ -20,6 +21,7 @@ from mini_notebooklm_rag.summary.service import SummaryService
 from mini_notebooklm_rag.ui.chat_panel import render_chat_panel
 from mini_notebooklm_rag.ui.document_panel import render_document_panel
 from mini_notebooklm_rag.ui.evaluation_panel import render_evaluation_panel
+from mini_notebooklm_rag.ui.learning_panel import render_learning_panel
 from mini_notebooklm_rag.ui.retrieval_panel import render_index_controls, render_retrieval_panel
 from mini_notebooklm_rag.ui.shared import (
     EMBEDDING_DEVICE_OPTIONS,
@@ -130,8 +132,8 @@ def render() -> None:
 
     with studio_column:
         st.subheader("Studio")
-        summary_tab, retrieval_tab, evaluation_tab, dev_tab = st.tabs(
-            ["Summary", "Retrieval Debug", "Evaluation", "Dev Info"]
+        summary_tab, retrieval_tab, evaluation_tab, learning_tab, dev_tab = st.tabs(
+            ["Summary", "Retrieval Debug", "Evaluation", "Learning Tools", "Dev Info"]
         )
         with summary_tab:
             render_summary_panel(
@@ -159,6 +161,19 @@ def render() -> None:
                 documents,
                 runtime_settings,
             )
+        with learning_tab:
+            if retrieval_service is None:
+                st.error(retrieval_error or "Retrieval service is unavailable.")
+            else:
+                learning_service = LearningService(runtime_settings, retrieval_service)
+                render_learning_panel(
+                    learning_service,
+                    selected_workspace,
+                    documents,
+                    selected_document_ids,
+                    index_status,
+                    api_key,
+                )
         with dev_tab:
             _render_dev_info(
                 selected_workspace,
@@ -254,4 +269,4 @@ def _render_dev_info(
                 "warnings": list(index_status.warnings),
             }
         )
-    st.info("Learning tools coming next: Quiz, Flashcards, Export.")
+    st.info("Learning Tools are available in Studio for Quiz, Flashcards, and Export.")

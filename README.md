@@ -41,6 +41,8 @@ It is single-user and local-first by design.
 - Retrieval evaluation cases, JSON import/export, and local eval runs.
 - Optional MLflow logging through the `observability` extra.
 - NotebookLM-like Streamlit layout with a Sources sidebar, center Chat workflow, and Studio tools panel.
+- Query-focused Learning Tools for quiz and flashcard generation from selected sources.
+- Markdown and JSON download exports for generated quiz and flashcard artifacts.
 
 ## Architecture Summary
 
@@ -51,6 +53,7 @@ flowchart LR
   UI --> QA["QA Service"]
   UI --> Summary["Summary Service"]
   UI --> Eval["Evaluation Runner"]
+  UI --> Learning["Learning Tools Service"]
   Ingestion --> SQLite["SQLite metadata/chunks"]
   Ingestion --> Files["Local workspace files"]
   Retrieval --> SQLite
@@ -62,6 +65,8 @@ flowchart LR
   Summary --> SQLite
   Eval --> Retrieval
   Eval --> SQLite
+  Learning --> Retrieval
+  Learning --> OpenAI
   Eval -. optional .-> MLflow["MLflow"]
 ```
 
@@ -184,6 +189,7 @@ Streamlit file watching is disabled in `.streamlit/config.toml` to avoid watcher
 9. Ask a grounded question and inspect `[S#]` citations.
 10. Generate a document summary and confirm cache behavior.
 11. Import or create eval cases, then run an eval batch.
+12. Generate quiz or flashcard artifacts from a topic/query in Studio > Learning Tools and download Markdown/JSON.
 
 ## Workflows
 
@@ -206,6 +212,10 @@ Summaries are per-document overview summaries. `AUTO_SUMMARY=false` remains the 
 ### Evaluation
 
 Evaluation is retrieval-only. It stores workspace-specific eval cases and eval runs in SQLite, supports JSON import/export, and computes hit@k by filename/page/page range. It does not call OpenAI.
+
+### Learning Tools
+
+Learning Tools are query-focused and use the selected source documents from the Sources sidebar. The app retrieves grounded context for the user's topic/query, asks OpenAI for strict JSON, validates the generated quiz or flashcards, and exposes Markdown/JSON download buttons. Generated learning artifacts are kept in Streamlit session state only; they are not stored in SQLite.
 
 ### Optional MLflow
 
@@ -237,6 +247,7 @@ If `MLFLOW_TRACKING_URI` is empty or MLflow is not installed, local evaluation s
 
 - Ingestion, chunking, embeddings, indexing, retrieval, and retrieval evaluation are local.
 - Chat, query rewrite, and summaries call OpenAI only when invoked and when an API key is configured.
+- Learning Tools call OpenAI only when manually invoked with selected sources and a valid index.
 - `AUTO_SUMMARY=false` is the default.
 - Summary cache avoids repeated calls for unchanged inputs.
 - Evaluation does not call OpenAI.
@@ -271,13 +282,13 @@ Common issues:
 Potential future phases:
 
 - Docker/deployment documentation.
-- Learning tools: Quiz, Flashcards, and Export.
 - Saved local API-key manager.
 - OCR/scanned PDF support.
 - Cross-document synthesis.
 - Answer-quality evaluation.
 - Optional reranking experiments.
 - Optional Ragas-style evaluation experiments.
+- Interactive quiz-taking/scoring, spaced repetition, Anki export, and PDF/DOCX export.
 
 ## Known Limitations
 
@@ -289,4 +300,5 @@ Potential future phases:
 - No streaming responses.
 - No saved API-key manager.
 - No Docker/deployment yet.
+- Learning Tools are generation/export only; no quiz scoring, spaced repetition, Anki export, PDF export, or DOCX export.
 - No LangChain or LlamaIndex integration by design.

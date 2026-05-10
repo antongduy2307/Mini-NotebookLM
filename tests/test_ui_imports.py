@@ -7,6 +7,7 @@ from mini_notebooklm_rag.ui import app_shell
 from mini_notebooklm_rag.ui.chat_panel import render_chat_panel
 from mini_notebooklm_rag.ui.document_panel import render_document_panel
 from mini_notebooklm_rag.ui.evaluation_panel import render_evaluation_panel
+from mini_notebooklm_rag.ui.learning_panel import render_learning_panel
 from mini_notebooklm_rag.ui.retrieval_panel import render_index_controls, render_retrieval_panel
 from mini_notebooklm_rag.ui.shared import (
     document_label,
@@ -31,6 +32,7 @@ def test_ui_panel_modules_import_render_functions() -> None:
     assert callable(render_retrieval_panel)
     assert callable(render_chat_panel)
     assert callable(render_evaluation_panel)
+    assert callable(render_learning_panel)
 
 
 def test_ui_shared_embedding_device_settings_copy() -> None:
