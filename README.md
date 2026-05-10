@@ -38,6 +38,7 @@ It is single-user and local-first by design.
 - Per-document overview summaries with SQLite cache.
 - Retrieval evaluation cases, JSON import/export, and local eval runs.
 - Optional MLflow logging through the `observability` extra.
+- NotebookLM-like Streamlit layout with a Sources sidebar, center Chat workflow, and Studio tools panel.
 
 ## Architecture Summary
 
@@ -173,13 +174,14 @@ Streamlit file watching is disabled in `.streamlit/config.toml` to avoid watcher
 1. Start `uv run app`.
 2. Create a workspace.
 3. Upload `examples/sample_notes.md`.
-4. Build/rebuild the workspace index.
-5. Run a retrieval debug query.
-6. Select up to 3 documents and start a chat.
+4. Select the sample document in the Sources sidebar.
+5. Build/rebuild the workspace index.
+6. Run a retrieval debug query from Studio.
 7. Add a temporary OpenAI API key or use `.env`.
-8. Ask a grounded question and inspect `[S#]` citations.
-9. Generate a document summary and confirm cache behavior.
-10. Import or create eval cases, then run an eval batch.
+8. Start a chat in the center panel.
+9. Ask a grounded question and inspect `[S#]` citations.
+10. Generate a document summary and confirm cache behavior.
+11. Import or create eval cases, then run an eval batch.
 
 ## Workflows
 
@@ -267,6 +269,7 @@ Common issues:
 Potential future phases:
 
 - Docker/deployment documentation.
+- Learning tools: Quiz, Flashcards, and Export.
 - Saved local API-key manager.
 - OCR/scanned PDF support.
 - Cross-document synthesis.
