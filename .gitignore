@@ -7,7 +7,7 @@
 storage/*
 !storage/.gitkeep
 
-# Local reference PDFs should not be committed as docs/examples.
+# Local planning/review docs are excluded from the current public repository.
 docs/
 
 # Python caches

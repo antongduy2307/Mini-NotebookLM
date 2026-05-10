@@ -2,6 +2,8 @@
 
 A local-first, NotebookLM-style RAG application built for learning and portfolio review. It demonstrates the core mechanics of document ingestion, chunking, hybrid retrieval, grounded QA, summaries, and retrieval evaluation without hiding the pipeline behind LangChain or LlamaIndex.
 
+This public README is self-contained for setup, review, and demo use.
+
 ## Why This Exists
 
 The project is intentionally small enough to inspect and large enough to show real engineering tradeoffs:
